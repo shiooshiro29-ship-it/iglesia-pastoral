@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
+    <meta name="theme-color" content="#5b3d8f">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Sorei Saishi · Iglesia Mundial del Mesías</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕯️</text></svg>">
+</head>
+<body>
+    <div id="app">
+        <section id="login-view">
+            <div class="login-logo">🕯️</div>
+            <div class="login-title">Sorei Saishi</div>
+            <div class="login-sub">Gestión de Servicios Conmemorativos y Ancestrales<br>Iglesia Mundial del Mesías · Bolivia</div>
+            <form class="login-form" id="login-form">
+                <input type="email" id="login-user" placeholder="Correo electrónico" autocomplete="username" required>
+                <input type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password" required>
+                <div id="login-error"></div>
+                <button type="submit" class="btn-login">Ingresar</button>
+            </form>
+            <button type="button" id="btn-registro" onclick="App.toggleRegistro()"
+                style="margin-top:14px;background:none;border:1px solid rgba(255,255,255,.25);color:#cfc6e6;padding:10px 16px;border-radius:10px;font-size:13px;cursor:pointer">
+                Crear cuenta con código
+            </button>
+            <form id="login-registro" style="display:none;width:100%;max-width:340px;margin-top:14px;flex-direction:column;gap:10px">
+                <input type="text" id="rg-nombre" placeholder="Nombre completo" required
+                    style="padding:13px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-size:15px;outline:none">
+                <input type="email" id="rg-email" placeholder="Correo electrónico" required
+                    style="padding:13px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-size:15px;outline:none">
+                <input type="password" id="rg-pass" placeholder="Contraseña (mínimo 6)" required
+                    style="padding:13px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-size:15px;outline:none">
+                <input type="text" id="rg-codigo" placeholder="Código de invitación" required
+                    style="padding:13px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-size:15px;outline:none;text-transform:uppercase">
+                <button type="button" class="btn-login" onclick="App.registrar()">Crear cuenta</button>
+            </form>
+        </section>
+
+        <section id="app-view" style="display:none">
+            <header class="app-header">
+                <h1 id="header-title">Inicio</h1>
+                <div class="header-user" id="header-user"></div>
+            </header>
+
+            <main id="main-content"></main>
+
+            <nav class="bottom-nav" id="bottom-nav"></nav>
+        </section>
+    </div>
+
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal" id="modal-body"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

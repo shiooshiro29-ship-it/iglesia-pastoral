@@ -1,0 +1,22 @@
+# Supabase local / secretos
+.env
+.env.*
+supabase/.temp/
+
+# SQLite / datos locales (no subir)
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# PHP local
+config/config.local.php
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/

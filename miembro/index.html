@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="theme-color" content="#1f2937">
+    <title>Miembro - Seguimiento Pastoral</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👥</text></svg>">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="toast"></div>
+
+    <header id="app-header">
+        <div class="hdr-left">
+            <button id="btn-menu" class="icon-btn" onclick="App.toggleMenu()">☰</button>
+            <h1 id="app-title">Miembro</h1>
+        </div>
+        <div class="hdr-right">
+            <span id="hdr-rol" class="chip"></span>
+        </div>
+    </header>
+
+    <div id="menu-overlay" class="overlay" onclick="App.toggleMenu()"></div>
+    <aside id="side-menu">
+        <div class="menu-head">
+            <div class="avatar" id="menu-avatar"></div>
+            <div>
+                <div class="menu-nombre" id="menu-nombre"></div>
+                <div class="menu-user">@<span id="menu-user"></span></div>
+            </div>
+        </div>
+        <nav id="menu-nav"></nav>
+        <div class="menu-foot">
+            <button class="btn btn-red" onclick="App.logout()">🚪 Cerrar sesión</button>
+        </div>
+    </aside>
+
+    <main id="main-content"></main>
+
+    <div id="fab" class="fab" onclick="App.openFab()">➕</div>
+    <div id="fab-menu" class="fab-menu hidden"></div>
+
+    <nav id="bottom-nav"></nav>
+
+    <div id="modal" class="modal-overlay hidden" onclick="if(event.target===this)App.cerrarModal()">
+        <div class="modal-box" id="modal-content"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
