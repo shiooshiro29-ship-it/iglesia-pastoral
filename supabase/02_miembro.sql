@@ -474,7 +474,8 @@ begin
         where id = v_perfil_id;
     end if;
 
-    update public.miembros set estado = 'en_seguimiento', updated_at = now() where id = v_perfil_id;
+    update public.miembros set estado = 'en_seguimiento', updated_at = now()
+    where id = v_perfil_id and estado in ('nuevo', 'inactivo');
 
     return jsonb_build_object('mensaje', 'Entrevista registrada', 'id', v_id);
 end;
@@ -708,7 +709,8 @@ begin
         end if;
     end loop;
 
-    update public.miembros set estado = 'en_seguimiento', updated_at = now() where id = v_perfil_id;
+    update public.miembros set estado = 'en_seguimiento', updated_at = now()
+    where id = v_perfil_id and estado in ('nuevo', 'inactivo');
 
     return jsonb_build_object('mensaje', 'Plan creado', 'id', v_plan_id);
 end;

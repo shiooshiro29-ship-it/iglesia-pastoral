@@ -263,7 +263,7 @@ const App = (() => {
         }
 
         try {
-            const d = await API.solicitar({ tipo, antepasado_id: $('#sol-antepasado') ? $('#sol-antepasado').value : 0, fecha_evento: fecha, observaciones: $('#sol-obs').value });
+                const d = await API.solicitar({ tipo, antepasado_id: $('#sol-antepasado') && $('#sol-antepasado').value ? $('#sol-antepasado').value : null, fecha_evento: fecha, observaciones: $('#sol-obs').value });
             closeModal();
             showBanner(d.mensaje, d.fuera_plazo ? 'warn' : 'ok');
             setView('solicitudes');
@@ -344,7 +344,7 @@ const App = (() => {
         try {
             const fecha = $('#ed-fecha').value;
             if (!fecha) { showBanner('Indica la fecha del evento'); return; }
-            const d = await API.editarSolicitud(id, { fecha_evento: fecha, antepasado_id: $('#ed-antepasado').value || 0, observaciones: $('#ed-obs').value });
+            const d = await API.editarSolicitud(id, { fecha_evento: fecha, antepasado_id: $('#ed-antepasado').value || null, observaciones: $('#ed-obs').value });
             closeModal();
             showBanner(d.mensaje, d.fuera_plazo ? 'warn' : 'ok');
             setView('solicitudes');
@@ -439,9 +439,17 @@ const App = (() => {
         $('#fal-archivo').addEventListener('change', e => {
             const file = e.target.files[0];
             if (!file) return;
-            if (file.size > 250000) { showBanner('El archivo supera 250 KB — se registrará sin adjunto', 'warn'); e.target.value = ''; return; }
             const reader = new FileReader();
-            reader.onload = () => { e.target.dataset.dataurl = reader.result; };
+            reader.onload = () => {
+                const dataurl = reader.result;
+                if (dataurl.length > 340000) {
+                    showBanner('El archivo supera el tamaño permitido — se registrará sin adjunto', 'warn');
+                    e.target.value = ''; e.target.dataset.dataurl = '';
+                    return;
+                }
+                e.target.dataset.dataurl = dataurl;
+                showBanner('Adjunto listo para registrar', 'ok');
+            };
             reader.readAsDataURL(file);
         });
 
@@ -635,6 +643,7 @@ const App = (() => {
         try {
             const d = await API.proximosCultos();
             const puede = can(['responsable', 'presidente', 'administrador']);
+            const puedeBorrar = can(['presidente', 'administrador']);
             const lista = d.cultos.map(ck => `
                 <div class="list-item">
                     <div class="avatar">🗓️</div>
@@ -642,7 +651,7 @@ const App = (() => {
                         <div class="title">${tipoName(ck.tipo || 'Culto general')}</div>
                         <div class="sub">${ck.fecha} ${ck.hora ? '· ' + ck.hora : ''}${ck.lugar ? ' · ' + ck.lugar : ''}${ck.solicitante ? ' · ' + ck.solicitante : ''}</div>
                     </div>
-                    ${puede ? `<button class="btn btn-sm btn-red" onclick="App.eliminarCulto(${ck.id})">✖</button>` : ''}
+                    ${puedeBorrar ? `<button class="btn btn-sm btn-red" onclick="App.eliminarCulto(${ck.id})">✖</button>` : ''}
                 </div>`).join('');
 
             c.innerHTML = `
@@ -909,8 +918,8 @@ const App = (() => {
             <div class="meta-box">Periodo de recepción de solicitudes y días mínimos de anticipación (regla RN02). Fuera de este periodo la solicitud pasa a extemporánea (UC14).</div>
             <div class="row">
                 <div class="field"><label>Tipo</label>
-                    <select id="cr-tipo">
-                        ${['nensai','ireisai','shinrei'].map(t => `<option value="${t}" ${cc && cc.tipo === t ? 'selected' : ''}>${tipoName(t)}</option>`).join('')}
+                    <select id="cr-tipo" ${id ? '' : ''}>
+                        ${['nensai','ireisai','shinrei','senzo','mitamaeshi','eidai'].map(t => `<option value="${t}" ${cc && cc.tipo === t ? 'selected' : ''}>${tipoName(t)}</option>`).join('')}
                     </select>
                 </div>
                 <div class="field"><label>Año</label><input type="number" id="cr-anio" value="${cc ? cc.anio : new Date().getFullYear()}"></div>
@@ -939,7 +948,7 @@ const App = (() => {
     }
 
     // ================= UI GENÉRICA =================
-    function logout() { API.logout(); }
+    async function logout() { await API.logout(); window.location.reload(); }
 
     function toggleRegistro() {
         const c = $('#login-registro');

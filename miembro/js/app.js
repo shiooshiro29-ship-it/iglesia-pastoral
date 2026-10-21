@@ -417,6 +417,7 @@ const App = (() => {
     function visitaModal(usuarioId) {
         openModal(`
             <h2>🏠 Nueva visita <button class="close" onclick="App.cerrarModal()">✕</button></h2>
+            ${(!usuarioId || usuarioId === 0) && can(ROLES_DISC) ? `<div class="field"><label>Miembro *</label><select id="v-miembro"></select></div>` : ''}
             <div class="row">
                 <div class="field"><label>Tipo</label>
                     <select id="v-tipo"><option value="domicilio">Domicilio</option><option value="hospital">Hospital</option><option value="escuela">Escuela</option><option value="otra">Otra</option></select>
@@ -427,13 +428,23 @@ const App = (() => {
             <div class="field"><label>Observaciones</label><textarea id="v-obs" rows="3" placeholder="Resultados, hallazgos..."></textarea></div>
             <div class="modal-actions">
                 <button class="btn btn-outline" onclick="App.cerrarModal()">Cancelar</button>
-                <button class="btn btn-primary" onclick="App.guardarVisita(${usuarioId})">Guardar</button>
+                <button class="btn btn-primary" onclick="App.guardarVisita(${usuarioId || 0})">Guardar</button>
             </div>
         `);
+        if ((!usuarioId || usuarioId === 0) && can(ROLES_DISC)) {
+            setTimeout(async () => {
+                try {
+                    const d = await API.membersFiltro('', '');
+                    const sel = document.getElementById('v-miembro');
+                    if (sel) sel.innerHTML = d.miembros.map(m => `<option value="${m.usuario_id}">${m.nombre}</option>`).join('');
+                } catch (e) {}
+            }, 50);
+        }
     }
     async function guardarVisita(usuarioId) {
         try {
-            const d = await API.registrarVisita({ usuario_id: usuarioId, tipo: $('#v-tipo').value, fecha: $('#v-fecha').value, motivo: $('#v-motivo').value, observaciones: $('#v-obs').value });
+            const uid = (!usuarioId || usuarioId === 0) && document.getElementById('v-miembro') ? document.getElementById('v-miembro').value : usuarioId;
+            const d = await API.registrarVisita({ usuario_id: uid, tipo: $('#v-tipo').value, fecha: $('#v-fecha').value, motivo: $('#v-motivo').value, observaciones: $('#v-obs').value });
             cerrarModal(); showToast(d.mensaje, 'ok'); await renderPerfil();
         } catch (e) { showToast(e.message, 'err'); }
     }
@@ -441,22 +452,34 @@ const App = (() => {
     // ================= ESTUDIO MODAL =================
     function estudioModal(usuarioId) {
         openModal(`
-            <h2>📚 Sesión de estudio <button class="close" onclick="App.cerrarModal()">✕</button></h2>
-            <div class="field"><label>Tema *</label><input id="es-tema" placeholder="Tema de enseñanza"></div>
+            <h2>📚 Registrar estudio <button class="close" onclick="App.cerrarModal()">✕</button></h2>
+            ${(!usuarioId || usuarioId === 0) && can(ROLES_DISC) ? `<div class="field"><label>Miembro *</label><select id="es-miembro"></select></div>` : ''}
+            <div class="field"><label>Tema *</label><input id="es-tema" placeholder="Tema del estudio bíblico"></div>
             <div class="row">
                 <div class="field"><label>Fecha</label><input type="date" id="es-fecha" value="${today()}"></div>
-                <div class="field"><label>Duración (min)</label><input type="number" id="es-min" value="60" min="10"></div>
+                <div class="field"><label>Duración (min)</label><input type="number" id="es-min" value="60"></div>
             </div>
-            <div class="field"><label>Notas</label><textarea id="es-obs" rows="3" placeholder="Resumen / avance del miembro..."></textarea></div>
+            <div class="field"><label>Notas</label><textarea id="es-obs" rows="3"></textarea></div>
             <div class="modal-actions">
                 <button class="btn btn-outline" onclick="App.cerrarModal()">Cancelar</button>
-                <button class="btn btn-primary" onclick="App.guardarEstudio(${usuarioId})">Guardar</button>
+                <button class="btn btn-primary" onclick="App.guardarEstudio(${usuarioId || 0})">Guardar</button>
             </div>
         `);
+        if ((!usuarioId || usuarioId === 0) && can(ROLES_DISC)) {
+            setTimeout(async () => {
+                try {
+                    const d = await API.membersFiltro('', '');
+                    const sel = document.getElementById('es-miembro');
+                    if (sel) sel.innerHTML = d.miembros.map(m => `<option value="${m.usuario_id}">${m.nombre}</option>`).join('');
+                } catch (e) {}
+            }, 50);
+        }
     }
     async function guardarEstudio(usuarioId) {
         try {
-            const d = await API.registrarEstudio({ usuario_id: usuarioId, tema: $('#es-tema').value, fecha: $('#es-fecha').value, duracion_min: +$('#es-min').value, notas: $('#es-obs').value });
+            if (!$('#es-tema').value) { showToast('El tema es obligatorio', 'err'); return; }
+            const uid = (!usuarioId || usuarioId === 0) && document.getElementById('es-miembro') ? document.getElementById('es-miembro').value : usuarioId;
+            const d = await API.registrarEstudio({ usuario_id: uid, tema: $('#es-tema').value, fecha: $('#es-fecha').value, duracion_min: +$('#es-min').value, notas: $('#es-obs').value });
             cerrarModal(); showToast(d.mensaje, 'ok'); await renderPerfil();
         } catch (e) { showToast(e.message, 'err'); }
     }
@@ -465,21 +488,33 @@ const App = (() => {
     function lecturaModal(usuarioId) {
         openModal(`
             <h2>📖 Asignar lectura <button class="close" onclick="App.cerrarModal()">✕</button></h2>
-            <div class="field"><label>Título *</label><input id="l-titulo" placeholder="Título de la enseñanza/lectura"></div>
+            ${(!usuarioId || usuarioId === 0) && can(ROLES_DISC) ? `<div class="field"><label>Miembro *</label><select id="l-miembro"></select></div>` : ''}
+            <div class="field"><label>Título *</label><input id="l-titulo" placeholder="Título de la lectura"></div>
             <div class="row">
-                <div class="field"><label>Autor</label><input id="l-autor" placeholder="Autor"></div>
-                <div class="field"><label>Fecha</label><input type="date" id="l-fecha" value="${today()}"></div>
+                <div class="field"><label>Autor</label><input id="l-autor"></div>
+                <div class="field"><label>Fecha asignada</label><input type="date" id="l-fecha" value="${today()}"></div>
             </div>
-            <div class="field"><label>Notas</label><textarea id="l-notas" rows="3" placeholder="Instrucciones..."></textarea></div>
+            <div class="field"><label>Notas</label><textarea id="l-notas" rows="2"></textarea></div>
             <div class="modal-actions">
                 <button class="btn btn-outline" onclick="App.cerrarModal()">Cancelar</button>
-                <button class="btn btn-primary" onclick="App.guardarLectura(${usuarioId})">Asignar</button>
+                <button class="btn btn-primary" onclick="App.guardarLectura(${usuarioId || 0})">Asignar</button>
             </div>
         `);
+        if ((!usuarioId || usuarioId === 0) && can(ROLES_DISC)) {
+            setTimeout(async () => {
+                try {
+                    const d = await API.membersFiltro('', '');
+                    const sel = document.getElementById('l-miembro');
+                    if (sel) sel.innerHTML = d.miembros.map(m => `<option value="${m.usuario_id}">${m.nombre}</option>`).join('');
+                } catch (e) {}
+            }, 50);
+        }
     }
     async function guardarLectura(usuarioId) {
         try {
-            const d = await API.asignarLectura({ usuario_id: usuarioId, titulo: $('#l-titulo').value, autor: $('#l-autor').value, fecha_asignada: $('#l-fecha').value, notas: $('#l-notas').value });
+            if (!$('#l-titulo').value) { showToast('El título es obligatorio', 'err'); return; }
+            const uid = (!usuarioId || usuarioId === 0) && document.getElementById('l-miembro') ? document.getElementById('l-miembro').value : usuarioId;
+            const d = await API.asignarLectura({ usuario_id: uid, titulo: $('#l-titulo').value, autor: $('#l-autor').value, fecha_asignada: $('#l-fecha').value, notas: $('#l-notas').value });
             cerrarModal(); showToast(d.mensaje, 'ok'); await renderPerfil();
         } catch (e) { showToast(e.message, 'err'); }
     }
@@ -557,7 +592,18 @@ const App = (() => {
     }
 
     function verRegistros(actividadId, actividad) {
-        openModal(`<h2>📅 Registros <button class="close" onclick="App.cerrarModal()">✕</button></h2><div class="meta-box">${actividad}</div><div class="center muted">Datos almacenados localmente. Consulta tu plan para el historial completo.</div>`);
+        openModal(`<h2>📅 Seguimiento <button class="close" onclick="App.cerrarModal()">✕</button></h2><div class="meta-box">${actividad}</div><div id="reg-list" class="center muted">Cargando...</div>`);
+        setTimeout(async () => {
+            try {
+                const mis = await API.miActividad();
+                const a = (mis.actividades || []).find(x => String(x.id) === String(actividadId));
+                const regs = (a && a.registros) ? a.registros : [];
+                const box = document.getElementById('reg-list');
+                if (!box) return;
+                if (!regs.length) { box.innerHTML = '<div class="center muted">Sin registros aún. Usa "Cumplido/No cumplido" en tu plan.</div>'; return; }
+                box.innerHTML = regs.map(r => `<div class="list-item"><div class="info"><div class="title">${r.cumplido ? '✅ Cumplido' : '❌ No cumplido'}</div><div class="sub">${r.fecha || ''}${r.notas ? ' · ' + r.notas : ''}</div></div></div>`).join('');
+            } catch (e) { const box = document.getElementById('reg-list'); if (box) box.innerHTML = '<div class="center muted">No disponible</div>'; }
+        }, 50);
     }
 
     // ================= REPORTES =================
@@ -702,7 +748,13 @@ const App = (() => {
 
     function fabAccion(tipo) {
         $('#fab-menu').classList.add('hidden');
-        showToast('Abre el perfil de un miembro para registrar ' + (tipo === 'visita' ? 'una visita' : tipo === 'estudio' ? 'un estudio' : 'una lectura'), 'warn');
+        if (can(ROLES_DISC)) {
+            if (tipo === 'visita') visitaModal(0);
+            else if (tipo === 'estudio') estudioModal(0);
+            else if (tipo === 'lectura') lecturaModal(0);
+            return;
+        }
+        showToast('Solo el equipo pastoral puede registrar estas acciones', 'warn');
     }
 
     // ================= LOGIN =================

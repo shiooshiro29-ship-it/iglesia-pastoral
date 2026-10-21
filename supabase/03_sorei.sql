@@ -372,7 +372,7 @@ begin
 
     insert into public.solicitudes
         (solicitante_id, tipo, antepasado_id, fecha_evento, estado, fuera_plazo, primera_vez, observaciones)
-    values (v_uid, p_tipo, p_antepasado_id, p_fecha_evento, v_estado, v_fuera_plazo, v_primera, p_observaciones)
+    values (v_uid, p_tipo, nullif(p_antepasado_id, 0), p_fecha_evento, v_estado, v_fuera_plazo, v_primera, p_observaciones)
     returning id into v_solicitud_id;
 
     if p_tipo = 'eidai' then
@@ -438,7 +438,7 @@ begin
     v_estado := case when v_fuera_plazo then 'extemporanea' else 'pendiente_validacion' end;
 
     update public.solicitudes
-    set antepasado_id = p_antepasado_id,
+    set antepasado_id = coalesce(nullif(p_antepasado_id, 0), antepasado_id),
         fecha_evento = coalesce(p_fecha_evento, fecha_evento),
         fuera_plazo = v_fuera_plazo,
         estado = v_estado,
@@ -682,7 +682,7 @@ begin
     if p_fallecido_nombres is null or trim(p_fallecido_nombres) = '' then
         raise exception 'El nombre de la persona fallecida es obligatorio' using errcode = '22023';
     end if;
-    if p_certificado is not null and length(p_certificado) > 250000 then
+    if p_certificado is not null and length(p_certificado) > 350000 then
         raise exception 'El documento adjunto es demasiado grande' using errcode = '22023';
     end if;
     v_alerta := (p_certificado is null or length(p_certificado) < 5);
@@ -946,8 +946,15 @@ begin
     if p_tipo not in ('nensai','ireisai','shinrei','senzo','mitamaeshi','eidai') then
         raise exception 'Tipo no valido para cronograma' using errcode = '22023';
     end if;
-    if exists (select 1 from public.cronogramas where tipo = p_tipo and anio = v_anio) then
-        raise exception 'Ya existe un cronograma para este tipo y ano' using errcode = '22023';
+
+    select id into v_id from public.cronogramas where tipo = p_tipo and anio = v_anio;
+    if v_id is not null then
+        update public.cronogramas
+        set fecha_inicio = p_fecha_inicio,
+            fecha_fin = p_fecha_fin,
+            dias_anticipacion = coalesce(p_dias_anticipacion, 15)
+        where id = v_id;
+        return jsonb_build_object('id', v_id, 'mensaje', 'Cronograma actualizado (regla RN02)');
     end if;
 
     insert into public.cronogramas (tipo, anio, fecha_inicio, fecha_fin, dias_anticipacion)
@@ -960,6 +967,7 @@ $$;
 
 create or replace function public.ss_editar_cronograma(
     p_id bigint,
+    p_tipo text default null,
     p_fecha_inicio date default null,
     p_fecha_fin date default null,
     p_dias_anticipacion integer default 15
@@ -970,7 +978,10 @@ begin
         raise exception 'Permiso denegado' using errcode = '42501';
     end if;
     update public.cronogramas
-    set fecha_inicio = p_fecha_inicio, fecha_fin = p_fecha_fin, dias_anticipacion = coalesce(p_dias_anticipacion, 15)
+    set tipo = coalesce(nullif(p_tipo, ''), tipo),
+        fecha_inicio = p_fecha_inicio,
+        fecha_fin = p_fecha_fin,
+        dias_anticipacion = coalesce(p_dias_anticipacion, 15)
     where id = p_id;
     return jsonb_build_object('mensaje', 'Cronograma actualizado');
 end;

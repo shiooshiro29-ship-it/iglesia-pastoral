@@ -295,8 +295,8 @@ const API = (() => {
 
         async editarCronograma(id, d) {
             return await rpc('ss_editar_cronograma', {
-                p_id: Number(id), p_fecha_inicio: v(d.fecha_inicio), p_fecha_fin: v(d.fecha_fin),
-                p_dias_anticipacion: n(d.dias_anticipacion) || 15,
+                p_id: Number(id), p_tipo: v(d.tipo), p_fecha_inicio: v(d.fecha_inicio),
+                p_fecha_fin: v(d.fecha_fin), p_dias_anticipacion: n(d.dias_anticipacion) || 15,
             });
         },
 
