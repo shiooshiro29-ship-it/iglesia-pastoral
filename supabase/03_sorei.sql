@@ -164,10 +164,11 @@ begin
     if p_fecha is null then
         return false;
     end if;
-    select *, true into v_cron, v_found
+    select * into v_cron
     from public.cronogramas
     where tipo = p_tipo and anio = extract(year from current_date)::int
     order by id desc limit 1;
+    v_found := found;
 
     if v_found and v_cron.dias_anticipacion > 0 then
         v_dias := v_cron.dias_anticipacion;
