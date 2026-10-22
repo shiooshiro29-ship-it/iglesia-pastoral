@@ -271,6 +271,10 @@ const API = (() => {
 
   async historialCultosAntepasados(fallecimientoId) {
     return await rpc('ss_historial_cultos_antepasados', { p_fallecimiento_id: fallecimientoId });
+  }
+
+  async regenerarAnualesAntepasados(anio=null) {
+    return await rpc('ss_regenerar_anuales_antepasados', { p_anio: anio });
   },
 
         async transferencias() {

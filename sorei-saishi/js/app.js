@@ -149,6 +149,9 @@ const App = (() => {
                 <div class="card">
                     <h3>🕊️ Avisos de Cultos de Antepasados</h3>
                     <div class="meta-box">Se avisa un día antes del culto ajustado. Si cae en domingo o es feriado, se pasa al sábado anterior y se avisa el viernes.</div>
+                    <div class="fab-row" style="margin-bottom:8px">
+                        <button class="btn btn-sm btn-outline" onclick="App.regenerarAnuales()">♻️ Renovar aniversarios anuales</button>
+                    </div>
                     <div id="avisos-antepasados"><div class="center muted">Cargando...</div></div>
                 </div>
                 ${quick}
@@ -581,6 +584,14 @@ const App = (() => {
         try {
             const r = await API.programarCultoAntepasado(id, fecha || null, null, null);
             showBanner(r.mensaje || 'Culto programado', 'ok');
+            cargarAvisosAntepasados();
+        } catch (e) { showBanner(e.message); }
+    }
+
+    async function regenerarAnuales() {
+        try {
+            const r = await API.regenerarAnualesAntepasados();
+            showBanner('Anuales regenerados: ' + (r.anuales_creados ?? 0) + ' (año ' + (r.anio || '') + ')', 'ok');
             cargarAvisosAntepasados();
         } catch (e) { showBanner(e.message); }
     }
@@ -1128,7 +1139,7 @@ const App = (() => {
         cerrarModal,
         ajustarTipo, nuevaSolicitud, guardarSolicitud, detalleSolicitud, editarSolicitud, guardarEdit, cancelarSolicitud,
         verFormAntepasado, guardarAntepasado,
-        guardarFallecimiento, verHistorialFallecido, cargarAvisosAntepasados, marcarAvisado, programarCultoAviso,
+        guardarFallecimiento, verHistorialFallecido, cargarAvisosAntepasados, marcarAvisado, programarCultoAviso, regenerarAnuales,
         accionValid,
         firmar, firmarProcesar,
         formOrientar, guardarOrientacion,

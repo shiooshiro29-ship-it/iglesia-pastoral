@@ -37,7 +37,11 @@ En **SQL Editor**, ejecuta en este orden:
 1. `supabase/01_comun.sql` — identidad, roles, invitaciones, RLS de perfiles.
 2. `supabase/02_miembro.sql` — tablas y funciones de Seguimiento de Miembros.
 3. `supabase/03_sorei.sql` — tablas y funciones de Sorei Saishi.
-4. `supabase/04_seed.sql` — código de invitación `IGLESIA` y cronogramas base.
+4. `supabase/04_seed.sql` — código de invitación `IGLESIA`, cronogramas base y feriados.
+5. `supabase/05_pg_cron.sql` — *(opcional)* automatización diaria de los cultos de
+   antepasados con `pg_cron` (regenerar el aniversario anual y recalcular fechas
+   si cambian los feriados). Si no se ejecuta, se puede renovar manualmente desde
+   el botón **♻️ Renovar aniversarios anuales** en la app.
 
 ### 3. Configurar la URL y la clave
 

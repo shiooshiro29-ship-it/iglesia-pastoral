@@ -116,6 +116,7 @@ create table if not exists public.cultos_antepasados (
     antepasado_id            bigint references public.antepasados(id),
     tipo                     text not null check (tipo in ('decenal','anual')),
     dias_desde_fallecimiento integer,
+    anio                     integer,
     fecha_objetivo           date not null,
     fecha_culto              date,
     fecha_aviso              date,
@@ -132,10 +133,12 @@ create table if not exists public.cultos_antepasados (
     updated_at               timestamptz default now()
 );
 
+alter table public.cultos_antepasados add column if not exists anio integer;
+
 create index if not exists idx_cultos_antepasados_culto on public.cultos_antepasados (fecha_culto, estado);
 create index if not exists idx_cultos_antepasados_aviso on public.cultos_antepasados (fecha_aviso, avisado);
 create index if not exists idx_cultos_antepasados_fallec on public.cultos_antepasados (fallecimiento_id);
-create unique index if not exists uq_cultos_antepasados_hito on public.cultos_antepasados (fallecimiento_id, tipo, coalesce(dias_desde_fallecimiento, -1));
+create unique index if not exists uq_cultos_antepasados_hito on public.cultos_antepasados (fallecimiento_id, tipo, coalesce(dias_desde_fallecimiento, -1), coalesce(anio, -1));
 
 create table if not exists public.cronogramas (
     id                bigint generated always as identity primary key,
@@ -263,11 +266,53 @@ begin
     values (p_fallecimiento_id,v_ant_id,'decenal',v_dias,v_fecha_obj,v_adj.fecha_culto,v_adj.fecha_aviso,v_adj.es_domingo,v_adj.es_feriado,v_adj.ajustado)
     on conflict do nothing;
   end loop;
-  v_anio_siguiente := (v_fal.fecha_fallecimiento + interval '1 year')::date;
+  v_anio_siguiente := make_date(
+    extract(year from v_fal.fecha_fallecimiento)::int + 1,
+    extract(month from v_fal.fecha_fallecimiento)::int,
+    extract(day from v_fal.fecha_fallecimiento)::int
+  );
   select * into v_adj from public.ss_ajustar_culto_antepasado(v_anio_siguiente);
-  insert into public.cultos_antepasados (fallecimiento_id,antepasado_id,tipo,dias_desde_fallecimiento,fecha_objetivo,fecha_culto,fecha_aviso,es_domingo,es_feriado,ajustado)
-  values (p_fallecimiento_id,v_ant_id,'anual',null,v_anio_siguiente,v_adj.fecha_culto,v_adj.fecha_aviso,v_adj.es_domingo,v_adj.es_feriado,v_adj.ajustado)
+  insert into public.cultos_antepasados (fallecimiento_id,antepasado_id,tipo,dias_desde_fallecimiento,fecha_objetivo,fecha_culto,fecha_aviso,es_domingo,es_feriado,ajustado,anio)
+  values (p_fallecimiento_id,v_ant_id,'anual',null,v_anio_siguiente,v_adj.fecha_culto,v_adj.fecha_aviso,v_adj.es_domingo,v_adj.es_feriado,v_adj.ajustado,extract(year from v_anio_siguiente)::int)
   on conflict do nothing;
+end;
+$$;
+
+-- Regenera el proximo aniversario anual de cada fallecido.
+-- Idempotente: crea el hito anual del anio correspondiente si no existe.
+create or replace function public.ss_regenerar_anuales_antepasados(p_anio integer default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_fal record;
+  v_anio int := coalesce(p_anio, extract(year from current_date)::int);
+  v_fecha_obj date;
+  v_adj record;
+  v_creados int := 0;
+begin
+  for v_fal in
+    select id, antepasado_id, fecha_fallecimiento
+    from public.fallecimientos
+    where fecha_fallecimiento is not null
+  loop
+    v_fecha_obj := make_date(
+      v_anio,
+      extract(month from v_fal.fecha_fallecimiento)::int,
+      extract(day from v_fal.fecha_fallecimiento)::int
+    );
+    -- Solo desde el primer aniversario en adelante
+    if v_fecha_obj > v_fal.fecha_fallecimiento then
+      select * into v_adj from public.ss_ajustar_culto_antepasado(v_fecha_obj);
+      insert into public.cultos_antepasados
+        (fallecimiento_id,antepasado_id,tipo,dias_desde_fallecimiento,
+         fecha_objetivo,fecha_culto,fecha_aviso,es_domingo,es_feriado,ajustado,anio)
+      values
+        (v_fal.id,v_fal.antepasado_id,'anual',null,
+         v_fecha_obj,v_adj.fecha_culto,v_adj.fecha_aviso,v_adj.es_domingo,v_adj.es_feriado,v_adj.ajustado,v_anio)
+      on conflict do nothing;
+      if found then v_creados := v_creados + 1; end if;
+    end if;
+  end loop;
+  return jsonb_build_object('anio', v_anio, 'anuales_creados', v_creados);
 end;
 $$;
 
@@ -1362,6 +1407,7 @@ grant execute on function public.ss_es_domingo(date) to authenticated;
 grant execute on function public.ss_es_feriado(date) to authenticated;
 grant execute on function public.ss_ajustar_culto_antepasado(date) to authenticated;
 grant execute on function public.ss_generar_cultos_antepasados(bigint) to authenticated;
+grant execute on function public.ss_regenerar_anuales_antepasados(integer) to authenticated;
 grant execute on function public.ss_avisos_cultos_antepasados(integer) to authenticated;
 grant execute on function public.ss_marcar_aviso_antepasado(bigint, text) to authenticated;
 grant execute on function public.ss_programar_culto_antepasado(bigint, date, text, text) to authenticated;
