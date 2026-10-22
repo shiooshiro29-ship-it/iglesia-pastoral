@@ -1,4 +1,4 @@
--- ============================================================================
+﻿-- ============================================================================
 -- Iglesia Mundial del Mesias - Bolivia
 -- 03 - Sorei Saishi: servicios conmemorativos y ancestrales
 -- Port de las tablas y endpoints PHP (api/*.php)
@@ -7,15 +7,30 @@
 -- ---------------------------------------------------------------------------
 -- 1. Tablas
 -- ---------------------------------------------------------------------------
+create table if not exists public.feriados (
+    id bigserial primary key,
+    fecha date not null unique,
+    descripcion text,
+    creado_en timestamptz default now()
+);
+
 create table if not exists public.antepasados (
-    id                 bigint generated always as identity primary key,
-    miembro_id         uuid not null references public.profiles(id) on delete cascade,
-    nombres            text not null,
-    parentesco         text,
+    id                  bigint generated always as identity primary key,
+    miembro_id          uuid not null references public.profiles(id) on delete cascade,
+    nombres             text not null,
+    apellidos           text,
+    ci                  text,
+    sexo                text check (sexo in ('masculino','femenino')),
+    edad_fallecimiento  integer,
     fecha_fallecimiento date,
-    aniversario        text,
-    notas              text,
-    creado_en          timestamptz not null default now()
+    es_miembro          boolean default false,
+    solicitante_id      uuid references public.profiles(id),
+    tipo_relacion       text,
+    parentesco          text,
+    fallecimiento_id    bigint,
+    aniversario         text,
+    notas               text,
+    creado_en           timestamptz not null default now()
 );
 
 create table if not exists public.solicitudes (
@@ -44,15 +59,23 @@ create table if not exists public.firma_eidai (
 );
 
 create table if not exists public.fallecimientos (
-    id                bigint generated always as identity primary key,
-    fallecido_nombres text not null,
-    ci                text,
-    certificado       text,
-    solicitante_id    uuid not null references public.profiles(id),
-    estado            text not null default 'registrado',
-    transferido       boolean not null default false,
-    alerta            boolean not null default false,
-    creado_en         timestamptz not null default now()
+    id                    bigint generated always as identity primary key,
+    fallecido_nombres     text not null,
+    apellidos             text,
+    ci                    text,
+    sexo                  text check (sexo in ('masculino','femenino')),
+    edad_fallecimiento    integer,
+    fecha_fallecimiento   date,
+    es_miembro            boolean default false,
+    solicitante_id        uuid not null references public.profiles(id),
+    tipo_relacion         text,
+    certificado           text,
+    estado                text not null default 'registrado',
+    transferido           boolean not null default false,
+    alerta                boolean not null default false,
+    convertido_a_antepasado boolean default false,
+    antepasado_id         bigint,
+    creado_en             timestamptz not null default now()
 );
 
 create table if not exists public.transferencias (
@@ -82,9 +105,37 @@ create table if not exists public.calendario_cultos (
     fecha        date not null,
     hora         text,
     lugar        text,
-    estado       text not null default 'programado',
+    estado       text not null default 'programado' check (estado in ('programado','realizado','cancelado')),
+    notas        text,
     creado_en    timestamptz not null default now()
 );
+
+create table if not exists public.cultos_antepasados (
+    id                       bigint generated always as identity primary key,
+    fallecimiento_id         bigint not null references public.fallecimientos(id) on delete cascade,
+    antepasado_id            bigint references public.antepasados(id),
+    tipo                     text not null check (tipo in ('decenal','anual')),
+    dias_desde_fallecimiento integer,
+    fecha_objetivo           date not null,
+    fecha_culto              date,
+    fecha_aviso              date,
+    es_domingo               boolean default false,
+    es_feriado               boolean default false,
+    ajustado                 boolean default false,
+    avisado                  boolean default false,
+    fecha_aviso_registrado   timestamptz,
+    avisado_por              uuid references public.profiles(id),
+    programado_culto_id      bigint references public.calendario_cultos(id),
+    estado                   text not null default 'pendiente' check (estado in ('pendiente','avisado','programado','realizado','omitido')),
+    notas                    text,
+    created_at               timestamptz default now(),
+    updated_at               timestamptz default now()
+);
+
+create index if not exists idx_cultos_antepasados_culto on public.cultos_antepasados (fecha_culto, estado);
+create index if not exists idx_cultos_antepasados_aviso on public.cultos_antepasados (fecha_aviso, avisado);
+create index if not exists idx_cultos_antepasados_fallec on public.cultos_antepasados (fallecimiento_id);
+create unique index if not exists uq_cultos_antepasados_hito on public.cultos_antepasados (fallecimiento_id, tipo, coalesce(dias_desde_fallecimiento, -1));
 
 create table if not exists public.cronogramas (
     id                bigint generated always as identity primary key,
@@ -112,7 +163,14 @@ alter table public.firma_eidai       enable row level security;
 alter table public.fallecimientos     enable row level security;
 alter table public.transferencias    enable row level security;
 alter table public.orientaciones     enable row level security;
-alter table public.calendario_cultos enable row level security;
+alter table public.feriados enable row level security;
+alter table public.cultos_antepasados enable row level security;
+
+drop policy if exists "feriados_select" on public.feriados;
+create policy "feriados_select" on public.feriados for select using (auth.uid() is not null);
+
+drop policy if exists "cultos_antepasados_all" on public.cultos_antepasados;
+create policy "cultos_antepasados_all" on public.cultos_antepasados for all using (public.es_gestor() or auth.uid() = (select solicitante_id from public.fallecimientos f where f.id = fallecimiento_id)) with check (public.es_gestor() or auth.uid() = (select solicitante_id from public.fallecimientos f where f.id = fallecimiento_id));
 alter table public.cronogramas       enable row level security;
 
 drop policy if exists "antepasados_select" on public.antepasados;
@@ -154,6 +212,130 @@ create policy "cronogramas_select" on public.cronogramas
 -- 3. Reglas de negocio (RN02 plazos, UC7/UC8 validacion, UC12 orientacion,
 --    UC13 firmas Eidai, UC10 transferencias)
 -- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- Ajuste por domingo / feriado para cultos de antepasados
+-- ---------------------------------------------------------------------------
+create or replace function public.ss_es_domingo(p_fecha date)
+returns boolean language sql immutable as $$
+  select extract(dow from p_fecha) = 0;
+$$;
+
+create or replace function public.ss_es_feriado(p_fecha date)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists(select 1 from public.feriados where fecha = p_fecha);
+$$;
+
+create or replace function public.ss_ajustar_culto_antepasado(p_fecha date)
+returns table(fecha_culto date, fecha_aviso date, es_domingo boolean, es_feriado boolean, ajustado boolean)
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_dom boolean;
+  v_fer boolean;
+begin
+  if p_fecha is null then return; end if;
+  v_dom := (extract(dow from p_fecha) = 0);
+  v_fer := exists(select 1 from public.feriados where fecha = p_fecha);
+  if v_dom or v_fer then
+    return query select (p_fecha - 1), (p_fecha - 2), v_dom, v_fer, true;
+  else
+    return query select p_fecha, (p_fecha - 1), false, false, false;
+  end if;
+end;
+$$;
+
+create or replace function public.ss_generar_cultos_antepasados(p_fallecimiento_id bigint)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_fal public.fallecimientos%rowtype;
+  v_ant_id bigint;
+  v_dias int;
+  v_fecha_obj date;
+  v_adj record;
+  v_anio_siguiente date;
+begin
+  select * into v_fal from public.fallecimientos where id = p_fallecimiento_id;
+  if not found or v_fal.fecha_fallecimiento is null then return; end if;
+  select antepasado_id into v_ant_id from public.fallecimientos where id = p_fallecimiento_id;
+  foreach v_dias in array array[10,20,30,40,50] loop
+    v_fecha_obj := v_fal.fecha_fallecimiento + v_dias;
+    select * into v_adj from public.ss_ajustar_culto_antepasado(v_fecha_obj);
+    insert into public.cultos_antepasados (fallecimiento_id,antepasado_id,tipo,dias_desde_fallecimiento,fecha_objetivo,fecha_culto,fecha_aviso,es_domingo,es_feriado,ajustado)
+    values (p_fallecimiento_id,v_ant_id,'decenal',v_dias,v_fecha_obj,v_adj.fecha_culto,v_adj.fecha_aviso,v_adj.es_domingo,v_adj.es_feriado,v_adj.ajustado)
+    on conflict do nothing;
+  end loop;
+  v_anio_siguiente := (v_fal.fecha_fallecimiento + interval '1 year')::date;
+  select * into v_adj from public.ss_ajustar_culto_antepasado(v_anio_siguiente);
+  insert into public.cultos_antepasados (fallecimiento_id,antepasado_id,tipo,dias_desde_fallecimiento,fecha_objetivo,fecha_culto,fecha_aviso,es_domingo,es_feriado,ajustado)
+  values (p_fallecimiento_id,v_ant_id,'anual',null,v_anio_siguiente,v_adj.fecha_culto,v_adj.fecha_aviso,v_adj.es_domingo,v_adj.es_feriado,v_adj.ajustado)
+  on conflict do nothing;
+end;
+$$;
+
+create or replace function public.ss_avisos_cultos_antepasados(p_dias integer default 7)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  return coalesce((select jsonb_agg(x order by x.fecha_aviso,x.fecha_culto) from (
+    select ca.*, f.fallecido_nombres,f.apellidos,f.sexo,f.ci,f.edad_fallecimiento,f.fecha_fallecimiento,f.es_miembro,f.solicitante_id,f.tipo_relacion,pr.nombre as solicitante
+    from public.cultos_antepasados ca
+    join public.fallecimientos f on f.id=ca.fallecimiento_id
+    left join public.profiles pr on pr.id=f.solicitante_id
+    where ca.estado in ('pendiente','avisado') and ca.fecha_aviso between (current_date-1) and (current_date+coalesce(p_dias,7))
+  ) x), '[]'::jsonb);
+end;
+$$;
+
+create or replace function public.ss_marcar_aviso_antepasado(p_id bigint,p_notas text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  update public.cultos_antepasados set avisado=true,estado='avisado',fecha_aviso_registrado=now(),avisado_por=auth.uid(),notas=coalesce(p_notas,notas),updated_at=now() where id=p_id;
+  return jsonb_build_object('mensaje','Aviso marcado como avisado');
+end;
+$$;
+
+create or replace function public.ss_programar_culto_antepasado(p_aviso_id bigint,p_fecha date default null,p_hora text default null,p_lugar text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_ca public.cultos_antepasados%rowtype;
+  v_culto_id bigint;
+  v_nombre text;
+  v_nota text;
+begin
+  select * into v_ca from public.cultos_antepasados where id=p_aviso_id;
+  if not found then raise exception 'Aviso no encontrado' using errcode='P0002'; end if;
+  select fallecido_nombres || ' ' || coalesce(apellidos,'') into v_nombre from public.fallecimientos where id=v_ca.fallecimiento_id;
+  v_nota := 'Culto de Antepasados (' || case when v_ca.tipo='decenal' then 'Decenal +' || v_ca.dias_desde_fallecimiento || ' dias' else 'Anual' end || ') - ' || v_nombre;
+  insert into public.calendario_cultos (fecha,hora,lugar,estado,notas) values (coalesce(p_fecha,v_ca.fecha_culto),p_hora,p_lugar,'programado',v_nota) returning id into v_culto_id;
+  update public.cultos_antepasados set programado_culto_id=v_culto_id,estado='programado',updated_at=now() where id=p_aviso_id;
+  return jsonb_build_object('culto_id',v_culto_id,'mensaje','Culto de Antepasados programado');
+end;
+$$;
+
+create or replace function public.ss_historial_cultos_antepasados(p_fallecimiento_id bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  return coalesce((select jsonb_agg(x order by x.fecha_objetivo) from (
+    select ca.*, pr.nombre as avisado_por_nombre from public.cultos_antepasados ca left join public.profiles pr on pr.id=ca.avisado_por where ca.fallecimiento_id=p_fallecimiento_id
+  ) x),'[]'::jsonb);
+end;
+$$;
+
+create or replace function public.ss_lista_fallecidos_completa()
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  return coalesce((select jsonb_agg(x order by x.creado_en desc) from (
+    select f.*, a.id as antepasado_id_reg, pr.nombre as solicitante_nombre from public.fallecimientos f left join public.antepasados a on a.fallecimiento_id=f.id left join public.profiles pr on pr.id=f.solicitante_id
+  ) x),'[]'::jsonb);
+end;
+$$;
+
+create or replace function public.ss_perfiles_miembros()
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  return coalesce((select jsonb_agg(x order by x.nombre) from (
+    select id, nombre, ci, rol, activo from public.profiles where activo = true
+  ) x),'[]'::jsonb);
+end;
+$$;
 create or replace function public.ss_evaluar_plazo(p_tipo text, p_fecha date)
 returns boolean language plpgsql stable security definer set search_path = public as $$
 declare
@@ -670,33 +852,80 @@ end;
 $$;
 
 create or replace function public.ss_registrar_fallecimiento(
-    p_fallecido_nombres text,
+    p_nombres text,
+    p_apellidos text default null,
     p_ci text default null,
+    p_sexo text default null,
+    p_edad integer default null,
+    p_fecha_fallecimiento date default null,
+    p_es_miembro boolean default false,
+    p_solicitante_id uuid default null,
+    p_tipo_relacion text default null,
     p_certificado text default null
 )
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-    v_id bigint;
+    v_fal_id bigint;
+    v_ant_id bigint;
+    v_solicitante uuid := coalesce(p_solicitante_id, auth.uid());
+    v_nombres_completo text;
     v_alerta boolean;
 begin
-    if p_fallecido_nombres is null or trim(p_fallecido_nombres) = '' then
-        raise exception 'El nombre de la persona fallecida es obligatorio' using errcode = '22023';
+    if not exists (select 1 from public.profiles where id = v_solicitante) then
+        raise exception 'El miembro solicitante debe estar registrado' using errcode = '22023';
+    end if;
+    if coalesce(trim(p_nombres), '') = '' then
+        raise exception 'Los nombres son obligatorios' using errcode = '22023';
+    end if;
+    if p_fecha_fallecimiento is null then
+        raise exception 'La fecha de fallecimiento es obligatoria' using errcode = '22023';
     end if;
     if p_certificado is not null and length(p_certificado) > 350000 then
         raise exception 'El documento adjunto es demasiado grande' using errcode = '22023';
     end if;
     v_alerta := (p_certificado is null or length(p_certificado) < 5);
+    v_nombres_completo := trim(p_nombres || ' ' || coalesce(p_apellidos, ''));
 
-    insert into public.fallecimientos (fallecido_nombres, ci, certificado, solicitante_id, alerta)
-    values (p_fallecido_nombres, p_ci, p_certificado, auth.uid(), v_alerta)
-    returning id into v_id;
+    insert into public.fallecimientos (
+        fallecido_nombres, apellidos, ci, sexo, edad_fallecimiento,
+        fecha_fallecimiento, es_miembro, solicitante_id, tipo_relacion, certificado,
+        estado, transferido, alerta, convertido_a_antepasado
+    )
+    values (
+        trim(p_nombres), nullif(trim(p_apellidos), ''), p_ci, p_sexo, p_edad,
+        p_fecha_fallecimiento, coalesce(p_es_miembro, false), v_solicitante, p_tipo_relacion, p_certificado,
+        'registrado', false, v_alerta, true
+    )
+    returning id into v_fal_id;
 
-    perform public.ss_registrar_transferencia(v_id, 'fallecimiento',
-        jsonb_build_object('fallecido_nombres', p_fallecido_nombres, 'ci', p_ci));
-    update public.fallecimientos set transferido = true, estado = 'transferido' where id = v_id;
+    insert into public.antepasados (
+        miembro_id, nombres, apellidos, ci, sexo, edad_fallecimiento,
+        fecha_fallecimiento, es_miembro, solicitante_id, tipo_relacion, parentesco,
+        fallecimiento_id
+    )
+    values (
+        v_solicitante, v_nombres_completo, nullif(trim(p_apellidos), ''), p_ci, p_sexo, p_edad,
+        p_fecha_fallecimiento, coalesce(p_es_miembro, false), v_solicitante, p_tipo_relacion, p_tipo_relacion,
+        v_fal_id
+    )
+    returning id into v_ant_id;
 
-    return jsonb_build_object('id', v_id, 'transferido', true,
-        'mensaje', 'Fallecimiento registrado y transferido a la Sede Nacional (UC10)');
+    update public.fallecimientos set antepasado_id = v_ant_id, convertido_a_antepasado = true where id = v_fal_id;
+
+    perform public.ss_generar_cultos_antepasados(v_fal_id);
+
+    perform public.ss_registrar_transferencia(v_fal_id, 'fallecimiento',
+        jsonb_build_object('fallecido', v_nombres_completo, 'fecha_fallecimiento', p_fecha_fallecimiento, 'solicitante_id', v_solicitante));
+
+    update public.fallecimientos set transferido = true, estado = 'transferido' where id = v_fal_id;
+
+    return jsonb_build_object(
+        'id', v_fal_id,
+        'fallecimiento_id', v_fal_id,
+        'antepasado_id', v_ant_id,
+        'transferido', true,
+        'mensaje', 'Fallecido registrado, agregado al Libro de Almas y cultos de antepasados generados'
+    );
 end;
 $$;
 
@@ -1126,7 +1355,17 @@ grant execute on function public.ss_firmas_pendientes() to authenticated;
 grant execute on function public.ss_detalle_firmas(bigint) to authenticated;
 grant execute on function public.ss_firmar_eidai(bigint, boolean, text) to authenticated;
 grant execute on function public.ss_fallecimientos() to authenticated;
-grant execute on function public.ss_registrar_fallecimiento(text, text, text) to authenticated;
+grant execute on function public.ss_registrar_fallecimiento(text, text, text, text, integer, date, boolean, uuid, text, text) to authenticated;
+grant execute on function public.ss_lista_fallecidos_completa() to authenticated;
+grant execute on function public.ss_perfiles_miembros() to authenticated;
+grant execute on function public.ss_es_domingo(date) to authenticated;
+grant execute on function public.ss_es_feriado(date) to authenticated;
+grant execute on function public.ss_ajustar_culto_antepasado(date) to authenticated;
+grant execute on function public.ss_generar_cultos_antepasados(bigint) to authenticated;
+grant execute on function public.ss_avisos_cultos_antepasados(integer) to authenticated;
+grant execute on function public.ss_marcar_aviso_antepasado(bigint, text) to authenticated;
+grant execute on function public.ss_programar_culto_antepasado(bigint, date, text, text) to authenticated;
+grant execute on function public.ss_historial_cultos_antepasados(bigint) to authenticated;
 grant execute on function public.ss_transferencias() to authenticated;
 grant execute on function public.ss_crear_transferencia(bigint, text, text) to authenticated;
 grant execute on function public.ss_orientaciones() to authenticated;
@@ -1142,3 +1381,4 @@ grant execute on function public.ss_reporte_consolidado() to authenticated;
 grant execute on function public.ss_reporte_listado(text, text) to authenticated;
 grant execute on function public.ss_dashboard() to authenticated;
 grant execute on function public.ss_telegram_estado() to authenticated;
+

@@ -146,10 +146,16 @@ const App = (() => {
                         </div>
                     </div>
                 </div>
+                <div class="card">
+                    <h3>🕊️ Avisos de Cultos de Antepasados</h3>
+                    <div class="meta-box">Se avisa un día antes del culto ajustado. Si cae en domingo o es feriado, se pasa al sábado anterior y se avisa el viernes.</div>
+                    <div id="avisos-antepasados"><div class="center muted">Cargando...</div></div>
+                </div>
                 ${quick}
                 <div class="stats-grid">${stats.map(s => `<div class="stat"><div class="num">${s[1]}</div><div class="lbl">${s[3]}${s[2]}</div></div>`).join('')}</div>
                 <div class="card"><h3>Próximos cultos conmemorativos</h3>${cultos || '<div class="empty"><div class="ico">🗓️</div>No hay cultos programados</div>'}</div>
             `;
+            cargarAvisosAntepasados();
         } catch (e) {
             c.innerHTML = `<div class="banner err">⚠️ ${e.message}</div>`;
         }
@@ -423,15 +429,28 @@ const App = (() => {
         c.innerHTML = `
             <div class="card">
                 <h3>Registrar fallecimiento</h3>
-                <div class="meta-box">El registro transfiere automáticamente los antecedentes a la Sede Nacional Santa Cruz (UC10 · RN09). Adjunta el certificado de defunción si lo tienes.</div>
-                <div class="field"><label>Nombre de la persona fallecida *</label><input id="fal-nombres" placeholder="Nombres completos"></div>
-                <div class="field"><label>CI</label><input id="fal-ci" placeholder="Número de carnet"></div>
+                <div class="meta-box">Al registrar se crea automáticamente el antepasado en el Libro de Almas. Se generan cultos cada 10 días hasta los 50 y el culto anual, ajustando al sábado si cae en domingo o feriado y avisando el día anterior.</div>
+                <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+                    <div class="field"><label>Nombres *</label><input id="fal-nombres" placeholder="Nombres"></div>
+                    <div class="field"><label>Apellidos</label><input id="fal-apellidos" placeholder="Apellidos"></div>
+                </div>
+                <div class="grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px">
+                    <div class="field"><label>CI</label><input id="fal-ci" placeholder="Carnet"></div>
+                    <div class="field"><label>Sexo *</label><select id="fal-sexo"><option value="">- Seleccionar -</option><option value="masculino">Masculino</option><option value="femenino">Femenino</option></select></div>
+                    <div class="field"><label>Edad al fallecer *</label><input id="fal-edad" type="number" min="0" placeholder="Edad"></div>
+                </div>
+                <div class="grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px">
+                    <div class="field"><label>Fecha de fallecimiento *</label><input type="date" id="fal-fecha"></div>
+                    <div class="field"><label>¿Es miembro de la iglesia?</label><select id="fal-esmiembro"><option value="false">No</option><option value="true">Sí</option></select></div>
+                    <div class="field"><label>Parentesco con el solicitante</label><select id="fal-relacion"><option value="">- Seleccionar -</option><option value="padre">Padre</option><option value="madre">Madre</option><option value="esposo/a">Esposo/a</option><option value="hijo/a">Hijo/a</option><option value="hermano/a">Hermano/a</option><option value="abuelo/a">Abuelo/a</option><option value="nieto/a">Nieto/a</option><option value="suegro/a">Suegro/a</option><option value="tio/a">Tío/a</option><option value="primo/a">Primo/a</option><option value="otro">Otro</option></select></div>
+                </div>
+                <div class="field"><label>Miembro que solicita (debe estar registrado) *</label><select id="fal-solicitante"><option value="">Cargando miembros...</option></select></div>
                 <div class="field">
                     <label>Certificado de defunción (imagen/PDF)</label>
                     <input type="file" id="fal-archivo" accept="image/*,application/pdf">
-                    <div class="muted" style="font-size:11.5px;margin-top:4px">Solo se guarda una referencia local (máx. 250 KB). Si es ilegible, se alertará a la Secretaría.</div>
+                    <div class="muted" style="font-size:11.5px;margin-top:4px">Solo se guarda una referencia local (máx. 250 KB).</div>
                 </div>
-                <button class="btn btn-primary btn-block" onclick="App.guardarFallecimiento()">⚰️ Registrar y transferir</button>
+                <button class="btn btn-primary btn-block" onclick="App.guardarFallecimiento()">⚰️ Registrar fallecido y generar cultos de antepasados</button>
             </div>
             <div class="card"><h3>Registros enviados</h3><div id="fal-lista"><div class="center muted">Cargando...</div></div></div>
         `;
@@ -454,31 +473,118 @@ const App = (() => {
         });
 
         try {
-            const d = await API.listarFallecimientos();
-            $('#fal-lista').innerHTML = d.fallecimientos.map(f => `
+            const [miem, lista] = await Promise.all([
+                API.perfiles ? API.perfiles().catch(()=>({profiles:[]})) : Promise.resolve({profiles:[]}),
+                API.listarFallecimientos().catch(()=>({fallecimientos:[]}))
+            ]);
+            const prof = (miem.profiles||[]).filter(p=>p.activo).map(p=>`<option value="${p.id}">${p.nombre} ${p.ci?(' - CI '+p.ci):''}</option>`).join('');
+            const sel = $('#fal-solicitante');
+            if(sel){ sel.innerHTML = '<option value="">- Seleccionar miembro solicitante -</option>'+prof; }
+            $('#fal-lista').innerHTML = (lista.fallecimientos||lista||[]).map(f => `
                 <div class="list-item">
                     <div class="avatar">⚰️</div>
                     <div class="info">
-                        <div class="title">${f.fallecido_nombres}</div>
-                        <div class="sub">${f.ci ? 'CI ' + f.ci + ' · ' : ''}${f.creado_en}${f.alerta ? ' · Requiere verificación manual (Secretaría)' : ''}</div>
+                        <div class="title">${f.fallecido_nombres||f.nombres||''} ${f.apellidos||''}</div>
+                        <div class="sub">${f.sexo?f.sexo+' · ':''}${f.edad_fallecimiento?f.edad_fallecimiento+' años · ':''}${f.fecha_fallecimiento?'Falleció: '+f.fecha_fallecimiento+' · ':''}${f.ci?'CI '+f.ci+' · ':''}${f.es_miembro?'Miembro · ':'No miembro · '}${f.tipo_relacion?f.tipo_relacion+' · ':''}${f.solicitante_nombre||''} · ${f.creado_en||''}</div>
                     </div>
                     ${f.transferido ? '<span class="badge ok">Transferido</span>' : '<span class="badge gray">Pendiente</span>'}
+                    <button class="btn btn-sm" onclick="App.verHistorialFallecido(${f.id})">Ver cultos antepasados</button>
                 </div>`).join('') || '<div class="empty"><div class="ico">⚰️</div>Sin registros</div>';
         } catch (e) { $('#fal-lista').innerHTML = `<div class="banner err">⚠️ ${e.message}</div>`; }
     }
 
     async function guardarFallecimiento() {
         const nombres = $('#fal-nombres').value.trim();
-        if (!nombres) { showBanner('El nombre de la persona fallecida es obligatorio'); return; }
+        const apellidos = $('#fal-apellidos').value.trim();
+        const fecha = $('#fal-fecha').value;
+        const sexo = $('#fal-sexo').value;
+        const edad = $('#fal-edad').value;
+        const solicitante = $('#fal-solicitante').value;
+        if (!nombres) { showBanner('Los nombres son obligatorios'); return; }
+        if (!fecha) { showBanner('La fecha de fallecimiento es obligatoria'); return; }
+        if (!sexo) { showBanner('El sexo es obligatorio'); return; }
+        if (edad === '' || edad === null) { showBanner('La edad al fallecer es obligatoria'); return; }
+        if (!solicitante) { showBanner('Debe seleccionar el miembro que solicita'); return; }
         const archivo = $('#fal-archivo');
         try {
-            const d = await API.registrarFallecimiento({ fallecido_nombres: nombres, ci: $('#fal-ci').value, certificado: archivo.dataset.dataurl || '' });
-            showBanner(d.mensaje, 'ok');
+            const d = await API.registrarFallecimiento({
+                nombres,
+                apellidos,
+                ci: $('#fal-ci').value,
+                sexo,
+                edad_fallecimiento: edad,
+                fecha_fallecimiento: fecha,
+                es_miembro: $('#fal-esmiembro').value === 'true',
+                solicitante_id: solicitante,
+                tipo_relacion: $('#fal-relacion').value,
+                certificado: archivo.dataset.dataurl || ''
+            });
+            showBanner(d.mensaje || 'Fallecido registrado y agregado al Libro de Almas', 'ok');
             setView('fallecer');
         } catch (e) { showBanner(e.message); }
     }
 
-    // ================= BANDEJA (UC7/UC8/UC14) =================
+    async function verHistorialFallecido(fid) {
+        try {
+            const hist = await API.historialCultosAntepasados(fid);
+            const items = (hist||[]).map(h => {
+                const ajustado = h.ajustado ? '<span class="badge warn">Ajustado</span>' : '';
+                const motivo = h.es_domingo ? ' (cae domingo → sábado)' : (h.es_feriado ? ' (feriado → sábado)' : '');
+                return `<div class="list-item">
+                    <div class="avatar">🕊️</div>
+                    <div class="info">
+                        <div class="title">${h.tipo==='decenal'?('Decenal +'+h.dias_desde_fallecimiento+' días'):('Anual')} ${ajustado}${motivo}</div>
+                        <div class="sub">Fecha objetivo: ${h.fecha_objetivo} · Culto: <b>${h.fecha_culto||h.fecha_objetivo}</b> · Avisar: <b>${h.fecha_aviso}</b> · Estado: ${h.estado} ${h.avisado?'· Avisado':''}</div>
+                    </div>
+                </div>`;
+            }).join('');
+            openModal(`<h2>Historial de cultos de antepasados <button class="close" onclick="App.cerrarModal()">✕</button></h2>
+                <div class="card"><h3>Hitos generados</h3>${items||'<div class="empty">Sin registros</div>'}</div>`);
+        } catch(e){ showBanner(e.message); }
+    }
+
+    async function cargarAvisosAntepasados() {
+        const box = document.getElementById('avisos-antepasados');
+        if (!box) return;
+        try {
+            const avisos = await API.avisosCultosAntepasados(14);
+            const list = avisos || [];
+            if (list.length === 0) { box.innerHTML = '<div class="empty"><div class="ico">🕊️</div>Sin avisos para hoy/próximos días</div>'; return; }
+            box.innerHTML = list.map(a => {
+                const tipo = a.tipo === 'decenal' ? ('Decenal +' + a.dias_desde_fallecimiento + ' días') : 'Anual';
+                const ajustado = a.ajustado ? '<span class="badge warn">Ajustado</span>' : '';
+                const motivo = a.es_domingo ? 'Cae domingo → culto el sábado' : (a.es_feriado ? 'Es feriado → culto el sábado' : '');
+                return `<div class="list-item">
+                    <div class="avatar">🕊️</div>
+                    <div class="info">
+                        <div class="title">${a.fallecido_nombres || ''} ${a.apellidos || ''} ${ajustado}</div>
+                        <div class="sub">${tipo} · Falleció: ${a.fecha_fallecimiento || '-'} · Parentesco: ${a.tipo_relacion || '-'} · Solicitante: ${a.solicitante || '-'}<br>Fecha objetivo: ${a.fecha_objetivo} · <b>Culto: ${a.fecha_culto}</b> · <b>Avisar: ${a.fecha_aviso}</b>${motivo ? '<br>' + motivo : ''}</div>
+                    </div>
+                    <button class="btn btn-sm" onclick="App.marcarAvisado(${a.id})">Marcar como avisado</button>
+                    <button class="btn btn-sm btn-primary" onclick="App.programarCultoAviso(${a.id}, '${a.fecha_culto || ''}')">Programar culto</button>
+                </div>`;
+            }).join('');
+        } catch (e) {
+            box.innerHTML = '<div class="banner err">⚠️ ' + e.message + '</div>';
+        }
+    }
+
+    async function marcarAvisado(id) {
+        try {
+            const r = await API.marcarAvisoAntepasado(id);
+            showBanner(r.mensaje || 'Aviso marcado', 'ok');
+            cargarAvisosAntepasados();
+        } catch (e) { showBanner(e.message); }
+    }
+
+    async function programarCultoAviso(id, fecha) {
+        try {
+            const r = await API.programarCultoAntepasado(id, fecha || null, null, null);
+            showBanner(r.mensaje || 'Culto programado', 'ok');
+            cargarAvisosAntepasados();
+        } catch (e) { showBanner(e.message); }
+    }
+
     async function renderBandeja() {
         const c = $('#main-content');
         c.innerHTML = `
@@ -1022,7 +1128,7 @@ const App = (() => {
         cerrarModal,
         ajustarTipo, nuevaSolicitud, guardarSolicitud, detalleSolicitud, editarSolicitud, guardarEdit, cancelarSolicitud,
         verFormAntepasado, guardarAntepasado,
-        guardarFallecimiento,
+        guardarFallecimiento, verHistorialFallecido, cargarAvisosAntepasados, marcarAvisado, programarCultoAviso,
         accionValid,
         firmar, firmarProcesar,
         formOrientar, guardarOrientacion,

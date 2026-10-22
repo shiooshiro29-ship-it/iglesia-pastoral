@@ -29,3 +29,20 @@ where not exists (
     select 1 from public.cronogramas c
     where c.tipo = t.tipo and c.anio = extract(year from current_date)::int
 );
+
+-- ---------------------------------------------------------------------------
+-- 4. Feriados nacionales de Bolivia (para ajuste de cultos de antepasados)
+--    Los feriados moviles (Carnaval, Corpus Christi) se ajustan por anio.
+-- ---------------------------------------------------------------------------
+insert into public.feriados (fecha, descripcion)
+select make_date(extract(year from current_date)::int, m, d), descripcion
+from (values
+    (1, 1, 'Anio Nuevo'),
+    (1, 22, 'Fundacion del Estado Plurinacional'),
+    (5, 1, 'Dia del Trabajo'),
+    (6, 21, 'Anio Nuevo Aymara'),
+    (8, 6, 'Dia de la Independencia'),
+    (11, 2, 'Dia de los Difuntos'),
+    (12, 25, 'Navidad')
+) as f(m, d, descripcion)
+on conflict (fecha) do nothing;

@@ -234,10 +234,44 @@ const API = (() => {
         },
 
         async registrarFallecimiento(d) {
-            return await rpc('ss_registrar_fallecimiento', {
-                p_fallecido_nombres: d.fallecido_nombres, p_ci: v(d.ci), p_certificado: v(d.certificado),
-            });
-        },
+    return await rpc('ss_registrar_fallecimiento', {
+      p_nombres: d.nombres || d.fallecido_nombres || '',
+      p_apellidos: v(d.apellidos),
+      p_ci: v(d.ci),
+      p_sexo: v(d.sexo),
+      p_edad: d.edad_fallecimiento !== undefined && d.edad_fallecimiento !== '' ? Number(d.edad_fallecimiento) : (d.edad !== undefined && d.edad !== '' ? Number(d.edad) : null),
+      p_fecha_fallecimiento: v(d.fecha_fallecimiento),
+      p_es_miembro: d.es_miembro === true || d.es_miembro === 'true',
+      p_solicitante_id: v(d.solicitante_id),
+      p_tipo_relacion: v(d.tipo_relacion),
+      p_certificado: v(d.certificado)
+    });
+  }
+
+  async listarFallecidos() {
+    try { return { fallecimientos: await rpc('ss_lista_fallecidos_completa', {}) }; } catch(e) { return await this.listarFallecimientos(); }
+  }
+
+  async perfiles() {
+    const lista = await rpc('ss_perfiles_miembros', {});
+    return { profiles: lista || [] };
+  }
+
+  async avisosCultosAntepasados(dias=7) {
+    return await rpc('ss_avisos_cultos_antepasados', { p_dias: dias });
+  }
+
+  async marcarAvisoAntepasado(id, notas=null) {
+    return await rpc('ss_marcar_aviso_antepasado', { p_id: id, p_notas: notas });
+  }
+
+  async programarCultoAntepasado(avisoId, fecha=null, hora=null, lugar=null) {
+    return await rpc('ss_programar_culto_antepasado', { p_aviso_id: avisoId, p_fecha: fecha, p_hora: hora, p_lugar: lugar });
+  }
+
+  async historialCultosAntepasados(fallecimientoId) {
+    return await rpc('ss_historial_cultos_antepasados', { p_fallecimiento_id: fallecimientoId });
+  },
 
         async transferencias() {
             const lista = await rpc('ss_transferencias');
