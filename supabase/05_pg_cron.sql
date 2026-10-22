@@ -75,9 +75,34 @@ select cron.schedule(
 );
 
 -- ---------------------------------------------------------------------------
+-- 4. (Opcional) Envio diario de avisos por WhatsApp (Edge Function).
+--    Requiere la extension pg_net y la Edge Function "notificar-whatsapp"
+--    ya desplegada. Reemplaza:
+--      <TU-PROYECTO>   por tu project ref
+--      <CRON_SECRET>   por el mismo valor que configuraste en los secretos
+-- ---------------------------------------------------------------------------
+create extension if not exists pg_net with schema extensions;
+
+select cron.schedule(
+    'whatsapp-avisos-antepasados',
+    '0 13 * * *',  -- 13:00 UTC = 09:00 Bolivia
+    $$
+    select net.http_post(
+        url := 'https://<TU-PROYECTO>.supabase.co/functions/v1/notificar-whatsapp',
+        headers := jsonb_build_object(
+            'Content-Type', 'application/json',
+            'x-cron-secret', '<CRON_SECRET>'
+        ),
+        body := jsonb_build_object('dias', 3)
+    );
+    $$
+);
+
+-- ---------------------------------------------------------------------------
 -- Notas:
 --   - Para ver los jobs:      select * from cron.job;
 --   - Para ver la ejecucion:  select * from cron.job_run_details order by start_time desc limit 20;
 --   - Para desprogramar:      select cron.unschedule('regenerar-anuales-antepasados');
 --                             select cron.unschedule('recalcular-fechas-antepasados');
+--                             select cron.unschedule('whatsapp-avisos-antepasados');
 -- ============================================================================

@@ -277,6 +277,13 @@ const API = (() => {
     return await rpc('ss_regenerar_anuales_antepasados', { p_anio: anio });
   },
 
+  async enviarAvisosWhatsApp(dias=3) {
+    if (!sb) throw errorConfig();
+    const { data, error } = await sb.functions.invoke('notificar-whatsapp', { body: { dias } });
+    if (error) throw new Error('No se pudo enviar por WhatsApp: ' + (error.message || 'error'));
+    return data;
+  },
+
         async transferencias() {
             const lista = await rpc('ss_transferencias');
             return { transferencias: lista || [] };

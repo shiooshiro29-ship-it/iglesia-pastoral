@@ -319,6 +319,9 @@ $$;
 create or replace function public.ss_avisos_cultos_antepasados(p_dias integer default 7)
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
+  if not public.es_gestor() then
+    raise exception 'Permiso denegado' using errcode = '42501';
+  end if;
   return coalesce((select jsonb_agg(x order by x.fecha_aviso,x.fecha_culto) from (
     select ca.*, f.fallecido_nombres,f.apellidos,f.sexo,f.ci,f.edad_fallecimiento,f.fecha_fallecimiento,f.es_miembro,f.solicitante_id,f.tipo_relacion,pr.nombre as solicitante
     from public.cultos_antepasados ca
@@ -332,6 +335,9 @@ $$;
 create or replace function public.ss_marcar_aviso_antepasado(p_id bigint,p_notas text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
+  if not public.es_gestor() then
+    raise exception 'Permiso denegado' using errcode = '42501';
+  end if;
   update public.cultos_antepasados set avisado=true,estado='avisado',fecha_aviso_registrado=now(),avisado_por=auth.uid(),notas=coalesce(p_notas,notas),updated_at=now() where id=p_id;
   return jsonb_build_object('mensaje','Aviso marcado como avisado');
 end;
@@ -345,6 +351,9 @@ declare
   v_nombre text;
   v_nota text;
 begin
+  if not public.es_gestor() then
+    raise exception 'Permiso denegado' using errcode = '42501';
+  end if;
   select * into v_ca from public.cultos_antepasados where id=p_aviso_id;
   if not found then raise exception 'Aviso no encontrado' using errcode='P0002'; end if;
   select fallecido_nombres || ' ' || coalesce(apellidos,'') into v_nombre from public.fallecimientos where id=v_ca.fallecimiento_id;

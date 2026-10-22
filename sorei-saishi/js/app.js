@@ -134,6 +134,17 @@ const App = (() => {
                     <button class="btn btn-outline" onclick="App.go('almas')">🕯️ Libro de almas</button>
                 </div>`;
             }
+            const esGestor = ['responsable', 'presidente', 'administrador'].includes(r);
+            const panelAvisos = esGestor ? `
+                <div class="card">
+                    <h3>🕊️ Avisos de Cultos de Antepasados</h3>
+                    <div class="meta-box">Se avisa un día antes del culto ajustado. Si cae en domingo o es feriado, se pasa al sábado anterior y se avisa el viernes.</div>
+                    <div class="fab-row" style="margin-bottom:8px">
+                        <button class="btn btn-sm btn-outline" onclick="App.regenerarAnuales()">♻️ Renovar aniversarios anuales</button>
+                        <button class="btn btn-sm btn-outline" onclick="App.enviarAvisosWhatsApp()">🟢 Enviar por WhatsApp</button>
+                    </div>
+                    <div id="avisos-antepasados"><div class="center muted">Cargando...</div></div>
+                </div>` : '';
 
             c.innerHTML = `
                 <div class="card">
@@ -146,19 +157,12 @@ const App = (() => {
                         </div>
                     </div>
                 </div>
-                <div class="card">
-                    <h3>🕊️ Avisos de Cultos de Antepasados</h3>
-                    <div class="meta-box">Se avisa un día antes del culto ajustado. Si cae en domingo o es feriado, se pasa al sábado anterior y se avisa el viernes.</div>
-                    <div class="fab-row" style="margin-bottom:8px">
-                        <button class="btn btn-sm btn-outline" onclick="App.regenerarAnuales()">♻️ Renovar aniversarios anuales</button>
-                    </div>
-                    <div id="avisos-antepasados"><div class="center muted">Cargando...</div></div>
-                </div>
+                ${panelAvisos}
                 ${quick}
                 <div class="stats-grid">${stats.map(s => `<div class="stat"><div class="num">${s[1]}</div><div class="lbl">${s[3]}${s[2]}</div></div>`).join('')}</div>
                 <div class="card"><h3>Próximos cultos conmemorativos</h3>${cultos || '<div class="empty"><div class="ico">🗓️</div>No hay cultos programados</div>'}</div>
             `;
-            cargarAvisosAntepasados();
+            if (esGestor) cargarAvisosAntepasados();
         } catch (e) {
             c.innerHTML = `<div class="banner err">⚠️ ${e.message}</div>`;
         }
@@ -593,6 +597,17 @@ const App = (() => {
             const r = await API.regenerarAnualesAntepasados();
             showBanner('Anuales regenerados: ' + (r.anuales_creados ?? 0) + ' (año ' + (r.anio || '') + ')', 'ok');
             cargarAvisosAntepasados();
+        } catch (e) { showBanner(e.message); }
+    }
+
+    async function enviarAvisosWhatsApp() {
+        try {
+            const r = await API.enviarAvisosWhatsApp(3);
+            if (r && r.ok) {
+                showBanner('WhatsApp enviado a ' + (r.enviados ?? 0) + ' destino(s) · ' + (r.avisos ?? 0) + ' avisos', 'ok');
+            } else {
+                showBanner((r && r.mensaje) ? r.mensaje : 'No se pudo enviar por WhatsApp');
+            }
         } catch (e) { showBanner(e.message); }
     }
 
@@ -1139,7 +1154,7 @@ const App = (() => {
         cerrarModal,
         ajustarTipo, nuevaSolicitud, guardarSolicitud, detalleSolicitud, editarSolicitud, guardarEdit, cancelarSolicitud,
         verFormAntepasado, guardarAntepasado,
-        guardarFallecimiento, verHistorialFallecido, cargarAvisosAntepasados, marcarAvisado, programarCultoAviso, regenerarAnuales,
+        guardarFallecimiento, verHistorialFallecido, cargarAvisosAntepasados, marcarAvisado, programarCultoAviso, regenerarAnuales, enviarAvisosWhatsApp,
         accionValid,
         firmar, firmarProcesar,
         formOrientar, guardarOrientacion,
